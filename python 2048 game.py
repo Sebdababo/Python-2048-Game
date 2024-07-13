@@ -14,11 +14,12 @@ class Game2048:
         self.window_height = self.window_width + 100
 
         self.master.geometry(f"{self.window_width}x{self.window_height}")
-        self.master.resizable(True, True)
+        self.master.resizable(False, False)
 
         self.board = [[0] * self.size for _ in range(self.size)]
         self.score = 0
         self.high_score = 0
+        self.game_over = False
 
         self.colors = {
             0: ("#CDC1B4", "#776E65"),
@@ -55,22 +56,19 @@ class Game2048:
         self.high_score_label.pack(side="right")
 
         self.game_frame = tk.Frame(self.master, bg="#BBADA0")
-        self.game_frame.pack(padx=10, pady=10, expand=True, fill="both")
+        self.game_frame.pack(padx=10, pady=10)
 
         self.cells = []
         for i in range(self.size):
             row = []
             for j in range(self.size):
                 cell_frame = tk.Frame(self.game_frame, width=self.cell_size, height=self.cell_size)
-                cell_frame.grid(row=i, column=j, padx=5, pady=5, sticky="nsew")
+                cell_frame.grid(row=i, column=j, padx=5, pady=5)
+                cell_frame.grid_propagate(False)
                 cell_label = tk.Label(cell_frame, text="", font=("Arial", 36, "bold"), justify="center")
-                cell_label.pack(expand=True, fill="both")
+                cell_label.place(relx=0.5, rely=0.5, anchor="center")
                 row.append(cell_label)
             self.cells.append(row)
-
-        for i in range(self.size):
-            self.game_frame.grid_rowconfigure(i, weight=1)
-            self.game_frame.grid_columnconfigure(i, weight=1)
 
     def spawn_number(self, count=1):
         empty_cells = [(i, j) for i in range(self.size) for j in range(self.size) if self.board[i][j] == 0]
@@ -91,48 +89,56 @@ class Game2048:
                     fg=fg_color,
                     font=("Arial", 36 if num < 1000 else 28, "bold")
                 )
+                cell.master.config(bg=bg_color)
         self.score_label.config(text=f"Score: {self.score}")
         self.high_score_label.config(text=f"High Score: {self.high_score}")
 
     def move(self, direction):
-        original_board = [row[:] for row in self.board]
+        changed = False
         if direction in ['left', 'right']:
             for i in range(self.size):
-                line = self.board[i]
+                line = self.board[i][:]
                 if direction == 'right':
-                    line = line[::-1]
-                merged_line = self.merge(line)
+                    line.reverse()
+                new_line, line_score = self.merge(line)
                 if direction == 'right':
-                    merged_line = merged_line[::-1]
-                self.board[i] = merged_line
+                    new_line.reverse()
+                if line != new_line:
+                    changed = True
+                    self.board[i] = new_line
+                    self.score += line_score
         elif direction in ['up', 'down']:
             for j in range(self.size):
                 line = [self.board[i][j] for i in range(self.size)]
                 if direction == 'down':
-                    line = line[::-1]
-                merged_line = self.merge(line)
+                    line.reverse()
+                new_line, line_score = self.merge(line)
                 if direction == 'down':
-                    merged_line = merged_line[::-1]
-                for i in range(self.size):
-                    self.board[i][j] = merged_line[i]
-        return original_board != self.board
+                    new_line.reverse()
+                if line != new_line:
+                    changed = True
+                    for i in range(self.size):
+                        self.board[i][j] = new_line[i]
+                    self.score += line_score
+        return changed
 
     def merge(self, line):
-        new_line = [0] * self.size
-        idx = 0
-        for i in range(self.size):
-            if line[i] != 0:
-                if idx > 0 and new_line[idx-1] == line[i]:
-                    new_line[idx-1] *= 2
-                    self.score += new_line[idx-1]
-                    if self.score > self.high_score:
-                        self.high_score = self.score
-                else:
-                    new_line[idx] = line[i]
-                    idx += 1
-        return new_line
+        new_line = [i for i in line if i != 0]
+        line_score = 0
+        i = 0
+        while i < len(new_line) - 1:
+            if new_line[i] == new_line[i + 1]:
+                new_line[i] *= 2
+                line_score += new_line[i]
+                new_line.pop(i + 1)
+            i += 1
+        new_line.extend([0] * (self.size - len(new_line)))
+        return new_line, line_score
 
     def key_press(self, event):
+        if self.game_over:
+            return
+        
         key = event.keysym.lower()
         if key in ['left', 'right', 'up', 'down']:
             changed = self.move(key)
@@ -140,22 +146,29 @@ class Game2048:
                 self.spawn_number()
                 self.update_gui()
                 if self.is_game_over():
+                    self.game_over = True
                     messagebox.showinfo("Game Over", f"Game Over! Your score: {self.score}")
-                    self.reset_game()
+                    self.master.after(100, self.master.focus_force)
                 elif self.has_won():
                     if messagebox.askyesno("Congratulations", f"You've reached {self.win_value}! Do you want to continue playing?"):
                         self.win_value *= 2
                     else:
                         self.reset_game()
+                    self.master.after(100, self.master.focus_force)
+            if self.score > self.high_score:
+                self.high_score = self.score
+            self.update_gui()
+        elif key == 'r':
+            self.reset_game()
 
     def is_game_over(self):
-        if any(0 in row for row in self.board):
-            return False
         for i in range(self.size):
             for j in range(self.size):
-                if j < self.size - 1 and self.board[i][j] == self.board[i][j+1]:
+                if self.board[i][j] == 0:
                     return False
                 if i < self.size - 1 and self.board[i][j] == self.board[i+1][j]:
+                    return False
+                if j < self.size - 1 and self.board[i][j] == self.board[i][j+1]:
                     return False
         return True
 
@@ -166,6 +179,7 @@ class Game2048:
         self.board = [[0] * self.size for _ in range(self.size)]
         self.score = 0
         self.win_value = 2048
+        self.game_over = False
         self.spawn_number(2)
         self.update_gui()
 
