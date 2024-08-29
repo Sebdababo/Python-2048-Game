@@ -51,3 +51,6 @@ When you run the game, a window will open displaying a 4x4 grid. Use the arrow k
 ## Data Persistence
 
 The game keeps track of your high score during the session, but it does not save it between sessions. Future versions may include persistent high score tracking.
+
+### Gameplay Image
+![2048 output](https://github.com/user-attachments/assets/4385bab6-2a3c-4dcb-be9d-464c9ff34870)
